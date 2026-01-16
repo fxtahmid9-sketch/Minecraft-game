@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Minecraft Run: T∆HMID Edition</title>
+    <script src="cordova.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --mc-gray: #6a6a6a; --mc-dark: #333333; --mc-light: #aaaaaa; 
+            --mc-green: #55a02e; --mc-red: #ff4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { 
+            width: 100vw; height: 100vh; background: #87CEEB; 
+            overflow: hidden; touch-action: none; 
+            font-family: 'Press Start 2P', cursive; user-select: none;
+        }
+
+        #game-stage { position: relative; width: 100%; height: 100%; overflow: hidden; }
+        .shake { animation: shakeAnim 0.3s; }
+        @keyframes shakeAnim { 0%, 100% {transform: translate(0,0);} 25% {transform: translate(-5px,5px);} 75% {transform: translate(5px,-5px);} }
+
+        /* CLOUDS */
+        .cloud { position: absolute; background: white; width: 100px; height: 40px; box-shadow: 10px 10px 0 rgba(0,0,0,0.1); z-index: 5; opacity: 0.8; }
+        .cloud::before { content: ''; position: absolute; background: white; width: 40px; height: 20px; top: -20px; left: 20px; }
+
+        /* UI POSITIONED BELOW THE BANNER AD (Approx 90px down) */
+        #ui-layer { 
+            position: absolute; 
+            top: 90px; 
+            width: 100%; display: flex; flex-direction: column; align-items: center; z-index: 100; pointer-events: none; 
+        }
+        #score-board { font-size: 32px; color: white; text-shadow: 4px 4px 0px #000; }
+        #high-score { font-size: 12px; color: #ffcc00; text-shadow: 2px 2px 0px #000; margin-top: 10px; }
+        
+        #dino { width: 70px; height: 70px; position: absolute; left: 50px; bottom: 125px; z-index: 85; image-rendering: pixelated; display: none; }
+        .walking { animation: walkCycle 0.2s infinite steps(2); }
+        @keyframes walkCycle { 0% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+        .poop { position: absolute; width: 20px; height: 15px; background: #6d4c41; border: 2px solid #3e2723; z-index: 80; border-radius: 3px; }
+
+        #ground-container { position: absolute; bottom: 0; width: 100%; height: 125px; z-index: 95; }
+        #grass-top { width: 200%; height: 45px; position: absolute; top: 0; background: var(--mc-green) url('ground.png') repeat-x; background-size: auto 45px; image-rendering: pixelated; }
+        #dirt-bottom { width: 100%; height: 80px; position: absolute; bottom: 0; background: #5d4037; }
+
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 200; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); }
+        #menu-title { color: white; text-shadow: 5px 5px 0px #000; font-size: 24px; margin-bottom: 30px; }
+
+        .mc-btn { 
+            width: 280px; padding: 20px; margin: 10px; background: var(--mc-gray); border: 4px solid #000; 
+            color: #fff; font-size: 14px; text-align: center; cursor: pointer;
+            box-shadow: inset -4px -4px 0px var(--mc-dark), inset 4px 4px 0px var(--mc-light);
+        }
+        .mc-btn:active { transform: scale(0.95); }
+        
+        .cactus { width: 60px; height: 90px; position: absolute; bottom: 112px; right: -100px; z-index: 10; image-rendering: pixelated; }
+        #watermark { position: absolute; bottom: 15px; font-size: 10px; color: rgba(255,255,255,0.4); pointer-events: none; }
+        #hint { position: absolute; width: 100%; top: 50%; text-align: center; color: white; font-size: 14px; text-shadow: 2px 2px #000; z-index: 150; display: none; }
+    </style>
+</head>
+<body onclick="handleAction()">
+
+    <audio id="bgm" loop src="bgm.mp3"></audio>
+    <audio id="sfx-jump" src="jump.mp3"></audio>
+    <audio id="sfx-die" src="died.mp3"></audio>
+    <audio id="sfx-btn" src="button.mp3"></audio>
+
+    <div id="game-stage">
+        <div id="ui-layer">
+            <div id="score-board">00000</div>
+            <div id="high-score">HI 00000</div>
+        </div>
+        <div id="hint">TAP TO JUMP</div>
+        <div id="dino"><img src="dino.png" style="width:100%; height:100%;"></div>
+        <div id="ground-container">
+            <div id="grass-top"></div>
+            <div id="dirt-bottom"></div>
+        </div>
+    </div>
+
+    <div id="menu-overlay" class="overlay">
+        <h1 id="menu-title">MINECRAFT RUN</h1>
+        <div id="btn-play" class="mc-btn" onclick="pressPlay(event)">START GAME</div>
+        <div id="btn-retry" class="mc-btn" style="display:none; background: var(--mc-green);" onclick="pressPlay(event)">TRY AGAIN</div>
+        <div id="btn-main-menu" class="mc-btn" style="display:none;" onclick="goToMainMenu(event)">MAIN MENU</div>
+        <div id="btn-dev" class="mc-btn" style="background:#4a4a4a;" onclick="toggleDev(event, true)">DEVELOPER</div>
+        <div id="watermark">fxgamesorg</div>
+    </div>
+
+    <div id="dev-panel" class="overlay" style="display:none; background: rgba(0,0,0,0.95);">
+        <div style="color:#ffcc00; font-size:22px; margin-bottom:10px; text-shadow:3px 3px #000;">T∆HMID</div>
+        <div style="color:white; font-size:12px; margin-bottom:35px;">Lead Game Developer</div>
+        <div class="mc-btn" onclick="toggleDev(event, false)">BACK</div>
+    </div>
+
+    <script>
+        const dino = document.getElementById("dino"), menu = document.getElementById("menu-overlay");
+        const grass = document.getElementById("grass-top"), hint = document.getElementById("hint");
+        const scoreTxt = document.getElementById("score-board"), hiScoreTxt = document.getElementById("high-score");
+        const stage = document.getElementById("game-stage"), bgm = document.getElementById("bgm");
+
+        let state = "MENU", score = 0, hiScore = localStorage.getItem('mc_hiscore') || 0;
+        let speed = 6.0, grassX = 0, cacti = [], clouds = [], poops = [];
+        let posY = 0, velY = 0, gravity = 0.65, jump = -15, hasPoopedThisJump = false;
+
+        hiScoreTxt.innerText = "HI " + hiScore.toString().padStart(5, '0');
+
+        function playSfx(id) { const a = document.getElementById(id); a.currentTime = 0; a.play().catch(()=>{}); }
+        function toggleDev(e, show) { e.stopPropagation(); playSfx('sfx-btn'); document.getElementById('dev-panel').style.display = show ? "flex" : "none"; }
+
+        function pressPlay(e) { 
+            e.stopPropagation(); playSfx('sfx-btn'); resetGame(); 
+            menu.style.display = "none"; dino.style.display = "block"; hint.style.display = "block"; state = "PREPARE"; 
+        }
+
+        function goToMainMenu(e) {
+            e.stopPropagation(); playSfx('sfx-btn'); resetGame();
+            state = "MENU"; dino.style.display = "none";
+            document.getElementById("menu-title").innerText = "MINECRAFT RUN";
+            document.getElementById("menu-title").style.color = "white";
+            document.getElementById("btn-play").style.display = "block";
+            document.getElementById("btn-retry").style.display = "none";
+            document.getElementById("btn-main-menu").style.display = "none";
+        }
+
+        function resetGame() {
+            score = 0; speed = 6.0; posY = 0; velY = 0; scoreTxt.innerText = "00000";
+            cacti.forEach(c => c.remove()); cacti = [];
+            poops.forEach(p => p.el.remove()); poops = [];
+            dino.classList.remove('walking');
+            dino.style.bottom = "125px";
+        }
+
+        function createPoop() {
+            const p = document.createElement("div"); p.className = "poop";
+            p.style.left = "65px"; p.style.bottom = (125 - posY) + "px";
+            stage.appendChild(p);
+            poops.push({ el: p, x: 65, y: (125 - posY), vY: 0 });
+        }
+
+        function spawnCloud() {
+            const c = document.createElement("div"); c.className = "cloud";
+            let startX = Math.random() * window.innerWidth;
+            let startY = Math.random() * 200 + 50;
+            c.style.left = startX + "px"; c.style.top = startY + "px";
+            stage.appendChild(c);
+            clouds.push({ el: c, x: startX, s: Math.random() * 0.4 + 0.2 });
+        }
+        for(let i=0; i<5; i++) spawnCloud();
+
+        function handleAction() {
+            if (state === "PREPARE") {
+                state = "PLAYING"; hint.style.display = "none";
+                dino.classList.add('walking'); bgm.play().catch(()=>{});
+                spawnCactus(); requestAnimationFrame(loop);
+            } else if (state === "PLAYING" && posY === 0) {
+                velY = jump; hasPoopedThisJump = false;
+                dino.classList.remove('walking'); playSfx('sfx-jump');
+            }
+        }
+
+        function loop() {
+            if (state !== "PLAYING") return;
+            grassX -= speed; grass.style.transform = `translateX(${grassX % window.innerWidth}px)`;
+            clouds.forEach(c => { c.x -= c.s; if(c.x < -120) c.x = window.innerWidth + 50; c.el.style.left = c.x + "px"; });
+            velY += gravity; posY += velY;
+            if (velY > 0 && !hasPoopedThisJump && posY < -50) { createPoop(); hasPoopedThisJump = true; }
+            if (posY >= 0) { posY = 0; velY = 0; if(!dino.classList.contains('walking')) dino.classList.add('walking'); }
+            dino.style.bottom = (125 - posY) + "px";
+            poops.forEach((p, i) => {
+                p.x -= speed; if(p.y > 125) { p.vY += gravity; p.y -= p.vY; } else { p.y = 125; }
+                p.el.style.left = p.x + "px"; p.el.style.bottom = p.y + "px";
+                if(p.x < -100) { p.el.remove(); poops.splice(i, 1); }
+            });
+            cacti.forEach((c, i) => {
+                let x = parseFloat(c.style.right) + speed; c.style.right = x + "px";
+                let dR = dino.getBoundingClientRect(), cR = c.getBoundingClientRect();
+                if (dR.right-25 > cR.left && dR.left+25 < cR.right && dR.bottom-10 > cR.top) die();
+                if (x > window.innerWidth + 150) {
+                    c.remove(); cacti.splice(i, 1); score++;
+                    scoreTxt.innerText = score.toString().padStart(5, '0');
+                    speed += 0.08;
+                }
+            });
+            requestAnimationFrame(loop);
+        }
+
+        function spawnCactus() {
+            if (state !== "PLAYING") return;
+            const c = document.createElement("img"); c.src = "cactus.png"; c.className = "cactus"; c.style.right = "-100px";
+            stage.appendChild(c); cacti.push(c);
+            setTimeout(spawnCactus, (Math.random() * 1500 + 1000) / (speed / 6));
+        }
+
+        function die() {
+            state = "GAMEOVER"; stage.classList.add('shake'); bgm.pause(); playSfx('sfx-die');
+            if (score > hiScore) { hiScore = score; localStorage.setItem('mc_hiscore', hiScore); }
+            setTimeout(() => {
+                stage.classList.remove('shake'); menu.style.display = "flex";
+                document.getElementById("menu-title").innerText = "GAME OVER";
+                document.getElementById("menu-title").style.color = "var(--mc-red)";
+                document.getElementById("btn-play").style.display = "none";
+                document.getElementById("btn-retry").style.display = "block";
+                document.getElementById("btn-main-menu").style.display = "block";
+            }, 400);
+        }
+
+        // --- THE ADMOB ENGINE ---
+        document.addEventListener('deviceready', function() {
+            var adUnitId = 'ca-app-pub-3940256099942544/6300978111'; // TEST ID
+            if (window.admob) {
+                admob.banner.config({ id: adUnitId, bannerAtTop: true, overlap: true });
+                admob.banner.prepare();
+                admob.banner.show();
+            }
+        }, false);
+    </script>
+</body>
+</html>
